@@ -2,7 +2,7 @@ import torch
 from transformers import AutoTokenizer
 from gemma3 import Gemma3ForCausalLM
 
-ckpt = "google/gemma-3-1b-pt"
+ckpt = "google/gemma-3-1b-it"
 tokenizer = AutoTokenizer.from_pretrained(ckpt)
 model = Gemma3ForCausalLM.from_pretrained(
     ckpt,
