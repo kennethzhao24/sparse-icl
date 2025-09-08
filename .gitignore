@@ -3,5 +3,8 @@ __pycache__
 *.log
 **.egg-info
 *.out
+*.ipynb
 **/transformers/
 **/outputs/
+**/gemma-model-and-tokenizer/
+**/.ipynb_checkpoints/

@@ -3,6 +3,7 @@ import argparse
 import json
 import glob
 import logging
+import random
 
 from pathlib import Path
 from tqdm import tqdm
@@ -23,13 +24,29 @@ from evals.util.results import SummaryResults, save_summary
 
 logger = logging.getLogger(__name__)
 
+# Create few-shot examples
+def create_few_shot_example(remaining_data, num_shots, index):
+    few_shot_example = ""
+    population = [number for number in range(len(remaining_data)) if number != index]
+    # random sampling
+    sampled_indices = random.sample(population, num_shots)
+    for i in sampled_indices:
+        data_point = remaining_data[i]
+        few_shot_example += data_point['problem'] + '\n Answer is' + data_point['answer'] + '\n\n'
+    few_shot_example += remaining_data[index]['problem']
+    return few_shot_example.strip()
+
+
+
 # Add argument parser
 def parse_args():
-    parser = argparse.ArgumentParser(description='Run model inference')
-    parser.add_argument('--model', type=str, default='google/gemma-3-1b-it',
+    parser = argparse.ArgumentParser(description='Run Many-shot ICL')
+    parser.add_argument('--model', type=str, default='google/gemma-3-1b-pt',
                       help='Model name or path')
     parser.add_argument('--task', type=str, default='math500',
                       help='Task name')
+    parser.add_argument('--num-shots', type=int, default=4,
+                      help='Number of few-shot examples to include')
     parser.add_argument('--dtype', type=str, default='bfloat16',
                       help='Data type for model (e.g., bfloat16, float16)')
     parser.add_argument('--seed', type=int, default=42,
@@ -118,7 +135,7 @@ if __name__ == '__main__':
     args = parse_args()
     set_seed(args.seed)
     # Create outputs directory if it doesn't exist
-    output_path = f'./outputs/vllm_main/{args.exp_name}/{args.model}'
+    output_path = f'./outputs/vllm_main/{args.exp_name}_{args.num_shots}_shot/{args.model}'
     os.makedirs(output_path, exist_ok=True)
 
     task_config = TaskConfig.from_yaml(TASK_NAMES_TO_YAML[args.task])
@@ -127,8 +144,16 @@ if __name__ == '__main__':
     handler = handler_cls(task_config)
     eval_data = handler.load_and_filter_dataset(0, -1) # start from 0, load all
     remaining_data = handler.process_remaining_data(eval_data, {})
+
+    # Modify each problem to include few-shot examples
+    for index in range(len(remaining_data)):
+        few_shot_example = create_few_shot_example(remaining_data, args.num_shots, index)
+        remaining_data[index]['problem'] = few_shot_example
+    
+    few_shot_data = remaining_data
+
     conversations = handler.make_conversations(
-        remaining_data,
+        few_shot_data,
         None, # str(model_config.system_prompt),
         None, # model_config.user_template,
         None, # model_config.assistant_prefill,
@@ -141,12 +166,15 @@ if __name__ == '__main__':
     print(f"Using {num_gpus} GPUs for tensor parallelism")
     
     model = LLM(model=args.model, 
-                    tensor_parallel_size=num_gpus,
-                    # max_model_len=length_used,
-                    dtype=args.dtype,
-                    enforce_eager=True)
+                tensor_parallel_size=num_gpus,
+                # max_model_len=length_used,
+                dtype=args.dtype,
+                enforce_eager=True)
     # Configure sampling parameters to return logits
-    sampling_params = SamplingParams(temperature=0.0, logprobs=5, max_tokens=args.max_tokens, seed=args.seed)
+    sampling_params = SamplingParams(temperature=0.0, 
+                                     logprobs=5, 
+                                     max_tokens=args.max_tokens, 
+                                     seed=args.seed)
 
     # Process in batches
     qa_pairs = []

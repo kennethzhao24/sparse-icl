@@ -146,7 +146,7 @@ class Gemma3TextConfig(PretrainedConfig):
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
+    } # pyright: ignore[reportAssignmentType]
 
     def __init__(
         self,
