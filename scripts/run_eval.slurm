@@ -18,4 +18,4 @@ conda env list
 source activate tts
 
 
-CUDA_VISIBLE_DEVICES=0,1 python3 eval_vllm.py --model google/gemma-3-4b-it --task gsm8k --dtype bfloat16 --seed 42 --batch_size 32 --max_tokens 1024 --exp_name a100_gsm8k_bf16_seq_1k
+CUDA_VISIBLE_DEVICES=0,1 python3 eval_vllm.py --model google/gemma-3-4b-it --task mmlu --dtype bfloat16 --seed 42 --batch_size 32 --max_tokens 1024 --exp_name a100_mmlu_bf16_seq_1k
