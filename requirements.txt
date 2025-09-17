@@ -1,2 +1,5 @@
-torch==2.5.1+cu121
-transformers==4.56.0
+datasets
+vllm==0.8.2
+latex2sympy2
+word2number
+pandas
