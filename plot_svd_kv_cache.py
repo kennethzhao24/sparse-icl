@@ -55,7 +55,7 @@ for layer_idx in range(num_layers):
 n = 20000
 
 inputs = tokenizer(
-    pg_19[0]['text'][:n],
+    pg_19[6]['text'][:n],
     return_tensors="pt",
 ).to(device)
 
