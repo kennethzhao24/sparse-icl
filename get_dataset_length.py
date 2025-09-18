@@ -1,8 +1,6 @@
 import os
 import argparse
 import logging
-import random
-
 
 import torch
 
@@ -15,27 +13,15 @@ from vllm.utils import is_list_of
 
 from evals.tasks import TASK_HANDLER_MAP, TASK_NAMES_TO_YAML, TaskConfig
 
+from utils.data_utils import create_few_shot_example
 
 logger = logging.getLogger(__name__)
-
-# Create few-shot examples
-def create_few_shot_example(remaining_data, num_shots, index):
-    few_shot_example = ""
-    population = [number for number in range(len(remaining_data)) if number != index]
-    # random sampling
-    sampled_indices = random.sample(population, num_shots)
-    for i in sampled_indices:
-        data_point = remaining_data[i]
-        few_shot_example += data_point['problem'] + '\n Answer is' + data_point['answer'] + '\n\n'
-    few_shot_example += remaining_data[index]['problem']
-    return few_shot_example.strip()
-
 
 
 # Add argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='Run Many-shot ICL')
-    parser.add_argument('--model', type=str, default='google/gemma-3-4b-it',
+    parser.add_argument('--model', type=str, default='google/gemma-3-1b-it',
                       help='Model name or path')
     parser.add_argument('--task', type=str, default='math500',
                       help='Task name')
@@ -47,8 +33,10 @@ def parse_args():
                       help='Random seed')
     parser.add_argument('--batch_size', type=int, default=1,
                       help='Batch size for inference')
-    parser.add_argument('--max_tokens', type=int, default=32768,
+    parser.add_argument('--max_tokens', type=int, default=1024,
                       help='Maximum number of tokens to generate')
+    parser.add_argument('--max_seq_len', type=int, default=32768,
+                      help='Maximum number of tokens for KV cache')
     parser.add_argument('--exp_name', type=str, default='baseline',
                       help='Experiment name')
     return parser.parse_args()
@@ -79,7 +67,7 @@ if __name__ == '__main__':
 
     # Modify each problem to include few-shot examples
     for index in range(len(remaining_data)):
-        few_shot_example = create_few_shot_example(remaining_data, args.num_shots, index)
+        few_shot_example = create_few_shot_example(args.task, remaining_data, args.num_shots, index)
         remaining_data[index]['problem'] = few_shot_example
     
     few_shot_data = remaining_data
@@ -99,7 +87,7 @@ if __name__ == '__main__':
     
     model = LLM(model=args.model, 
                 tensor_parallel_size=num_gpus,
-                max_model_len=8192,
+                max_model_len=args.max_seq_len,
                 dtype=args.dtype,
                 enforce_eager=True)
     # Configure sampling parameters to return logits
@@ -113,6 +101,7 @@ if __name__ == '__main__':
     jsonl_path = f'{output_path}/qa_pairs_{args.dtype}_bs_{args.batch_size}.jsonl'
     
     lengths = []
+
     for batch_start in range(0, total_samples, args.batch_size):
         batch_end = min(batch_start + args.batch_size, total_samples)
         current_batch = conversations[batch_start:batch_end]
@@ -151,8 +140,6 @@ if __name__ == '__main__':
                 prompt["multi_modal_data"] = mm_data
 
             prompts.append(prompt)
-
-            # print(prompts)
 
         # print(prompts)
         input_ids = tokenizer(prompts[0]['prompt'], return_tensors='pt')

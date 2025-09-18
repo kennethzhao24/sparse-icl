@@ -9,13 +9,15 @@ import torch
 from datasets import load_dataset
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
+from evals.tasks import TASK_HANDLER_MAP, TASK_NAMES_TO_YAML, TaskConfig
+from utils.data_utils import create_few_shot_example
 
 logger = logging.getLogger(__name__)
 
 # Add argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='SVD Rank Evaluation Script')
-    parser.add_argument('--model', type=str, default='google/gemma-3-4b-it',
+    parser.add_argument('--model', type=str, default='mistralai/Mistral-7B-Instruct-v0.1',
                       help='Model name or path')
     parser.add_argument('--task', type=str, default='math500',
                       help='Task name')
@@ -36,6 +38,19 @@ if __name__ == '__main__':
 
     if args.task == 'pg19': 
         data = load_dataset("emozilla/pg19", split="test")  # Load a small subset for testing
+    elif args.task == 'math500':
+        task_config = TaskConfig.from_yaml(TASK_NAMES_TO_YAML[args.task])
+        handler_name = task_config.handler
+        handler_cls = TASK_HANDLER_MAP[handler_name]
+        handler = handler_cls(task_config)
+        eval_data = handler.load_and_filter_dataset(0, -1) # start from 0, load 500 samples
+        data = handler.process_remaining_data(eval_data, {})
+        for index in range(len(data)):
+            few_shot_example = create_few_shot_example(args.task, data, 8, index)
+            data[index]['text'] = few_shot_example
+    else: 
+        raise NotImplementedError(f'Task {args.task} not implemented yet.')  
+    
 
     # Collect pre_rope outputs for all layers in these lists
     collected_k_outputs, collected_v_outputs = [], []
@@ -55,7 +70,7 @@ if __name__ == '__main__':
         """
         collected_v_outputs.append(output.detach().cpu())
     
-    if args.model.startswith('google/gemma'):
+    if args.model.startswith('google/gemma-3-4b-it'):
         num_layers = len(model.model.language_model.layers)
     else:
         num_layers = len(model.model.layers)
@@ -76,13 +91,16 @@ if __name__ == '__main__':
         # Clear collected outputs before each forward pass
         collected_k_outputs.clear(), collected_v_outputs.clear()
 
-        inputs = tokenizer(data[int(index)]['text'][:n], return_tensors="pt").to(device)
+        if args.task == 'pg19': 
+            inputs = tokenizer(data[int(index)]['text'][:n], return_tensors="pt").to(device)
+        else:
+            inputs = tokenizer(data[int(index)]['text'], return_tensors="pt").to(device)
     
         hooks_k, hooks_v = [], []
 
         for layer_idx in range(num_layers):
             # Access the i-th layer
-            if args.model.startswith('google/gemma'):
+            if args.model.startswith('google/gemma-3-4b-it'):
                 layer = model.model.language_model.layers[layer_idx].self_attn
             else:
                 layer = model.model.layers[layer_idx].self_attn
