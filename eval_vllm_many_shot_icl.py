@@ -41,11 +41,11 @@ def create_few_shot_example(remaining_data, num_shots, index):
 # Add argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='Run Many-shot ICL')
-    parser.add_argument('--model', type=str, default='google/gemma-3-1b-pt',
+    parser.add_argument('--model', type=str, default='google/gemma-3-1b-it',
                       help='Model name or path')
     parser.add_argument('--task', type=str, default='math500',
                       help='Task name')
-    parser.add_argument('--num-shots', type=int, default=4,
+    parser.add_argument('--num-shots', type=int, default=0,
                       help='Number of few-shot examples to include')
     parser.add_argument('--dtype', type=str, default='bfloat16',
                       help='Data type for model (e.g., bfloat16, float16)')
@@ -53,8 +53,10 @@ def parse_args():
                       help='Random seed')
     parser.add_argument('--batch_size', type=int, default=1,
                       help='Batch size for inference')
-    parser.add_argument('--max_tokens', type=int, default=32768,
+    parser.add_argument('--max_tokens', type=int, default=1024,
                       help='Maximum number of tokens to generate')
+    parser.add_argument('--max_seq_len', type=int, default=32768,
+                      help='Maximum number of tokens for KV cache')
     parser.add_argument('--exp_name', type=str, default='baseline',
                       help='Experiment name')
     return parser.parse_args()
@@ -167,7 +169,7 @@ if __name__ == '__main__':
     
     model = LLM(model=args.model, 
                 tensor_parallel_size=num_gpus,
-                # max_model_len=length_used,
+                max_model_len=args.max_seq_len,
                 dtype=args.dtype,
                 enforce_eager=True)
     # Configure sampling parameters to return logits
